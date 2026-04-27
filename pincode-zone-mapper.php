@@ -65,6 +65,8 @@ function pzm_handle_upload() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'pincode_zones';
 
+     $wpdb->query("TRUNCATE TABLE $table_name");
+
     if ($_FILES['csv_file']['error'] == 0) {
         $file = fopen($_FILES['csv_file']['tmp_name'], 'r');
 
