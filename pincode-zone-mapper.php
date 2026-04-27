@@ -1,19 +1,25 @@
 <?php
-/*
-Plugin Name: Pincode Zone Mapper
-Description: Upload Excel/CSV and store pincode zone mapping
-Version: 1.0
-Author: You
-*/
 
-if (!defined('ABSPATH')) exit;
+/*
+ * Plugin Name: Pincode Zone Mapper
+ * Description: Upload Excel/CSV and store pincode zone mapping
+ * Version: 1.0
+ * Author: You
+ */
+
+if (!defined('ABSPATH'))
+    exit;
 
 // Create table on activation
-function pzm_create_table() {
+function pzm_create_table()
+{
     global $wpdb;
     $table_name = $wpdb->prefix . 'pincode_zones';
+    $rates_table = $wpdb->prefix . 'pincode_zone_rates';
 
     $charset_collate = $wpdb->get_charset_collate();
+
+    require_once (ABSPATH . 'wp-admin/includes/upgrade.php');
 
     $sql = "CREATE TABLE $table_name (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -25,29 +31,71 @@ function pzm_create_table() {
     INDEX idx_zone (zone)
 ) $charset_collate;";
 
-    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    $sql2 = "CREATE TABLE $rates_table (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    zone VARCHAR(3) UNIQUE,
+    rate DECIMAL(10,2) NOT NULL
+) $charset_collate;";
+
+   
     dbDelta($sql);
+     dbDelta($sql2);    
 }
 
 register_activation_hook(__FILE__, 'pzm_create_table');
 
 // Add menu
-function pzm_menu() {
+function pzm_menu()
+{
     add_menu_page(
         'Pincode Upload',
         'Pincode Zones',
         'manage_options',
         'pincode-zones',
+        'pzm_upload_page',
+        'dashicons-location',
+        20
+    );
+
+    add_submenu_page(
+        'pincode-zones',
+        'Upload Pincode',
+        'Upload Pincode',
+        'manage_options',
+        'pincode-zones',  // same slug → avoids duplicate page
         'pzm_upload_page'
     );
+
+    // Submenu: Search
+    add_submenu_page(
+        'pincode-zones',
+        'Search Pincode',
+        'Search',
+        'manage_options',
+        'pincode-search',
+        'pzm_search_page'
+    );
+
+    add_submenu_page(
+        'pincode-zones',
+        'Zone Shipping Rates',
+        'Zone Rates',
+        'manage_options',
+        'pincode-zone-rates',
+        'pzm_zone_rates_page'
+    );
 }
+
 add_action('admin_menu', 'pzm_menu');
 
 // Upload page
-function pzm_upload_page() {
+function pzm_upload_page()
+{
     ?>
     <div class="wrap">
-        <h2>Upload Pincode CSV</h2>
+        <h1><b>Upload Pincode<b></h1><hr><br>
+        <p>Upload file in CSV format, have respective fields in order: <br>delivery_city, delivery_pincode, courier, zone (z_a) -- only 3 character allowed for zones.</p>
+        <br>
         <form method="post" enctype="multipart/form-data">
             <input type="file" name="csv_file" required />
             <input type="submit" name="upload" class="button button-primary" value="Upload">
@@ -60,12 +108,65 @@ function pzm_upload_page() {
     }
 }
 
+function pzm_search_page()
+{
+    ?>
+    <div class="wrap">
+        <h2><b>Search Pincode</b></h2><hr><br>
+        <p>Enter 6-digit pincode to check for delivery partners and zones</p>
+        <form method="post">
+            <input type="text" name="search_pincode" placeholder="Enter pincode" required>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            <input type="submit" name="search" class="button button-primary" value="Search">
+        </form>
+    </div>
+    <?php
+
+    if (isset($_POST['search'])) {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'pincode_zones';
+
+        $pincode = sanitize_text_field($_POST['search_pincode']);
+
+        $results = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT * FROM $table_name WHERE delivery_pincode = %s",
+                $pincode
+            )
+        );
+
+        if ($results) {
+            echo '<br><br><h3>Results:</h3>';
+            echo "<table class='widefat'><tr>
+                    <th>City</th>
+                    <th>Pincode</th>
+                    <th>Courier</th>
+                    <th>Zone</th>
+                  </tr>";
+
+            foreach ($results as $row) {
+                echo "<tr>
+                        <td>{$row->delivery_city}</td>
+                        <td>{$row->delivery_pincode}</td>
+                        <td>{$row->courier}</td>
+                        <td>{$row->zone}</td>
+                      </tr>";
+            }
+
+            echo '</table>';
+        } else {
+            echo '<p>No results found</p>';
+        }
+    }
+}
+
 // Handle file upload
-function pzm_handle_upload() {
+function pzm_handle_upload()
+{
     global $wpdb;
     $table_name = $wpdb->prefix . 'pincode_zones';
 
-     $wpdb->query("TRUNCATE TABLE $table_name");
+    $wpdb->query("TRUNCATE TABLE $table_name");
 
     if ($_FILES['csv_file']['error'] == 0) {
         $file = fopen($_FILES['csv_file']['tmp_name'], 'r');
@@ -81,11 +182,10 @@ function pzm_handle_upload() {
         $skipped = 0;
         $errors = [];
 
-   while (($row = fgetcsv($file)) !== FALSE) {
-   
-   $row_number++;
+        while (($row = fgetcsv($file)) !== FALSE) {
+            $row_number++;
 
-            //  Basic validation
+            //  Basic validation Check if all columns are present
             if (count($row) < 4) {
                 $errors[] = [
                     'row' => $row_number,
@@ -96,10 +196,10 @@ function pzm_handle_upload() {
                 continue;
             }
 
-            $city    = trim($row[0]);
+            $city = trim($row[0]);
             $pincode = trim($row[1]);
             $courier = trim($row[2]);
-            $zone    = substr(trim($row[3]), 0, 3);
+            $zone = substr(trim($row[3]), 0, 3);
 
             if (empty($pincode)) {
                 $errors[] = [
@@ -120,11 +220,10 @@ function pzm_handle_upload() {
                 $skipped++;
                 continue;
             }
-   
-   $values[] = $wpdb->prepare("(%s,%s,%s,%s)",$row[0], $row[1], $row[2], substr($row[3], 0, 3));
 
-    if (count($values) >= $batch_size) {
+            $values[] = $wpdb->prepare('(%s,%s,%s,%s)', $row[0], $row[1], $row[2], substr($row[3], 0, 3));
 
+            if (count($values) >= $batch_size) {
                 $query = "INSERT INTO $table_name 
                 (delivery_city, delivery_pincode, courier, zone)
                 VALUES " . implode(',', $values);
@@ -134,7 +233,7 @@ function pzm_handle_upload() {
                 if ($result === false) {
                     $errors[] = [
                         'row' => $row_number,
-                        'reason' => "DB Error: " . $wpdb->last_error,
+                        'reason' => 'DB Error: ' . $wpdb->last_error,
                         'data' => 'Batch failed'
                     ];
                 } else {
@@ -143,9 +242,9 @@ function pzm_handle_upload() {
 
                 $values = [];
             }
-}
+        }
 
-// Insert remaining
+        // Insert remaining
         if (!empty($values)) {
             $query = "INSERT INTO $table_name 
             (delivery_city, delivery_pincode, courier, zone)
@@ -156,14 +255,12 @@ function pzm_handle_upload() {
             if ($result === false) {
                 $errors[] = [
                     'row' => 'Final',
-                    'reason' => "DB Error: " . $wpdb->last_error,
+                    'reason' => 'DB Error: ' . $wpdb->last_error,
                     'data' => 'Final batch failed'
                 ];
             } else {
                 $inserted += $result;
             }
-
-            
         }
 
         fclose($file);
@@ -176,14 +273,14 @@ function pzm_handle_upload() {
 
         // ❗ ERROR TABLE (only if errors exist)
         if (!empty($errors)) {
-            echo "<h3>⚠️ Skipped / Failed Rows</h3>";
+            echo '<h3>⚠️ Skipped / Failed Rows</h3>';
             echo "<div style='max-height:300px; overflow:auto; border:1px solid #ccc;'>";
             echo "<table class='widefat fixed striped'>";
-            echo "<thead><tr>
+            echo '<thead><tr>
                     <th>Row</th>
                     <th>Reason</th>
                     <th>Data</th>
-                  </tr></thead><tbody>";
+                  </tr></thead><tbody>';
 
             foreach ($errors as $err) {
                 echo "<tr>
@@ -193,7 +290,73 @@ function pzm_handle_upload() {
                       </tr>";
             }
 
-            echo "</tbody></table></div>";
+            echo '</tbody></table></div>';
+        }
     }
 }
+
+function pzm_zone_rates_page() {
+    global $wpdb;
+
+    $zones_table = $wpdb->prefix . 'pincode_zones';
+    $rates_table = $wpdb->prefix . 'pincode_zone_rates';
+
+    // Save rates
+    if (isset($_POST['save_rates'])) {
+        foreach ($_POST['rates'] as $zone => $rate) {
+            $zone = sanitize_text_field($zone);
+            $rate = floatval($rate);
+
+            $wpdb->replace(
+                $rates_table,
+                [
+                    'zone' => $zone,
+                    'rate' => $rate
+                ],
+                ['%s', '%f']
+            );
+        }
+
+        echo "<div class='updated'><p>Rates saved successfully</p></div>";
+    }
+
+    // Get unique zones
+    $zones = $wpdb->get_col("SELECT DISTINCT zone FROM $zones_table WHERE zone != ''");
+
+    // Get existing rates
+    $existing_rates = $wpdb->get_results("SELECT * FROM $rates_table", OBJECT_K);
+
+    ?>
+    <div class="wrap">
+        <h2>Zone Shipping Rates</h2>
+
+        
+
+        <form method="post">
+            <table class="widefat">
+                <thead>
+                    <tr>
+                        <th>Zone</th>
+                        <th>Rate (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($zones as $zone): 
+                        $rate = isset($existing_rates[$zone]) ? $existing_rates[$zone]->rate : '';
+                    ?>
+                        <tr>
+                            <td><?php echo esc_html($zone); ?></td>
+                            <td>
+                                <input type="number" step="0.01" name="rates[<?php echo esc_attr($zone); ?>]" value="<?php echo esc_attr($rate); ?>">
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+
+            <br>
+            <input type="submit" name="save_rates" class="button button-primary" value="Save Rates">
+        </form>
+    </div>
+    <?php
 }
