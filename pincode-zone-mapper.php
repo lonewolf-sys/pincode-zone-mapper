@@ -10,6 +10,8 @@
 if (!defined('ABSPATH'))
     exit;
 
+require_once plugin_dir_path(__FILE__) . 'inc/helper-functions.php';
+
 // Create table on activation
 function pzm_create_table()
 {
@@ -32,14 +34,22 @@ function pzm_create_table()
 ) $charset_collate;";
 
     $sql2 = "CREATE TABLE $rates_table (
-    id int AUTO_INCREMENT PRIMARY KEY,
     zone VARCHAR(3) UNIQUE,
     rate DECIMAL(10,2) NOT NULL
 ) $charset_collate;";
 
    
-    dbDelta($sql);
+     dbDelta($sql);
      dbDelta($sql2);    
+
+     $wpdb->query(
+    $wpdb->prepare(
+        "INSERT INTO $rates_table (zone, rate) VALUES (%s, %f)
+         ON DUPLICATE KEY UPDATE rate = VALUES(rate)",
+        'COD',
+        50
+    )
+);
 }
 
 register_activation_hook(__FILE__, 'pzm_create_table');
@@ -326,6 +336,14 @@ function pzm_zone_rates_page() {
     // Get existing rates
     $existing_rates = $wpdb->get_results("SELECT * FROM $rates_table", OBJECT_K);
 
+    $zone_detail =[
+        "z_a" => 'Within City',
+        "z_b" => 'Within State',
+        "z_c" => 'Metro to Metro',
+        "z_d" => 'Rest of India',
+        "z_e" => 'NE, J&K and Special States'
+    ];
+
     ?>
     <div class="wrap">
         <h2>Zone Shipping Rates</h2>
@@ -336,8 +354,8 @@ function pzm_zone_rates_page() {
             <table class="widefat">
                 <thead>
                     <tr>
-                        <th>Zone</th>
-                        <th>Rate (₹)</th>
+                        <th width="400px"><h2>Zone</h2></th>
+                        <th><h2>Rate (₹) </h2></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -345,7 +363,7 @@ function pzm_zone_rates_page() {
                         $rate = isset($existing_rates[$zone]) ? $existing_rates[$zone]->rate : '';
                     ?>
                         <tr>
-                            <td><?php echo esc_html($zone); ?></td>
+                            <td><span><h3><?php echo esc_html($zone); ?></h3></span>&nbsp; <span><b><?php echo esc_html($zone_detail[$zone]); ?></b></span></td>
                             <td>
                                 <input type="number" step="0.01" name="rates[<?php echo esc_attr($zone); ?>]" value="<?php echo esc_attr($rate); ?>">
                             </td>
@@ -360,3 +378,5 @@ function pzm_zone_rates_page() {
     </div>
     <?php
 }
+
+
