@@ -39,3 +39,29 @@ function pzm_get_rate_by_pincode($pincode) {
 
     return $rate;
 }
+
+
+
+function get_free_shipping_min_amount() {
+
+    $min_amounts = [];
+
+    // Get all shipping zones
+    $zones = WC_Shipping_Zones::get_zones();
+
+    foreach ($zones as $zone) {
+        foreach ($zone['shipping_methods'] as $method) {
+
+            if ($method->id === 'free_shipping' && $method->enabled === 'yes') {
+
+                $settings = $method->instance_settings;
+
+                if (!empty($settings['min_amount'])) {
+                    $min_amounts[] = (float) $settings['min_amount'];
+                }
+            } 
+        }
+    }
+
+    return $min_amounts; // array (because multiple zones can have different values)
+}
