@@ -11,6 +11,7 @@ if (!defined('ABSPATH'))
     exit;
 
 require_once plugin_dir_path(__FILE__) . 'inc/helper-functions.php';
+require_once plugin_dir_path(__FILE__) . 'inc/shipping-rates.php';
 
 // Create table on activation
 function pzm_create_table()
@@ -42,7 +43,7 @@ function pzm_create_table()
      dbDelta($sql);
      dbDelta($sql2);    
 
-     $wpdb->query(
+    $wpdb->query(
     $wpdb->prepare(
         "INSERT INTO $rates_table (zone, rate) VALUES (%s, %f)
          ON DUPLICATE KEY UPDATE rate = VALUES(rate)",
