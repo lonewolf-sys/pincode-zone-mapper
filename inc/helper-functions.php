@@ -4,6 +4,9 @@ if (!defined('ABSPATH')) exit;
 
 // Example function
 function pzm_get_zone_by_pincode($pincode) {
+    
+    $pincode = sanitize_pincode($pincode);
+
     global $wpdb;
 
     $table = $wpdb->prefix . 'pincode_zones';
@@ -18,8 +21,10 @@ function pzm_get_zone_by_pincode($pincode) {
 
 function pzm_get_rate_by_pincode($pincode) {
 
-    global $wpdb;
+    $pincode = sanitize_pincode($pincode);
 
+    global $wpdb;
+    
     $rates_table = $wpdb->prefix . 'pincode_zone_rates';
 
     // Get zone row
@@ -64,4 +69,12 @@ function get_free_shipping_min_amount() {
     }
 
     return $min_amounts; // array (because multiple zones can have different values)
+}
+
+function sanitize_pincode($pincode){
+    
+    $pincode = is_string($pincode) ? $pincode : '';
+    $pincode = preg_replace('/\D/', '', $pincode);
+
+    return $pincode;
 }
